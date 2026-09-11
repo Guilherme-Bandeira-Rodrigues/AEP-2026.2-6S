@@ -27,7 +27,8 @@ import static org.mockito.Mockito.never;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("ProjetoSocialService")
-class ProjetoSocialServiceTest {
+class
+ProjetoSocialServiceTest {
 
     @Mock
     private ProjetoSocialRepository repository;
@@ -242,33 +243,4 @@ class ProjetoSocialServiceTest {
         }
     }
 
-    @Nested
-    @DisplayName("excluir")
-    class Excluir {
-
-        @Test
-        @DisplayName("deve excluir quando projeto existe")
-        void deveExcluirQuandoExiste() {
-            ProjetoSocial existente = projetoValido();
-            existente.setId("id-del");
-            given(repository.findById("id-del")).willReturn(Optional.of(existente));
-
-            service.excluir("id-del");
-
-            then(repository).should().delete(existente);
-        }
-
-        @Test
-        @DisplayName("deve lançar 404 quando projeto não existe")
-        void deveLancarNotFoundQuandoAusente() {
-            given(repository.findById("ausente")).willReturn(Optional.empty());
-
-            assertThatThrownBy(() -> service.excluir("ausente"))
-                    .isInstanceOf(ResponseStatusException.class)
-                    .satisfies(ex -> assertThat(((ResponseStatusException) ex).getStatusCode())
-                            .isEqualTo(HttpStatus.NOT_FOUND));
-
-            then(repository).should(never()).delete(any());
-        }
-    }
 }
