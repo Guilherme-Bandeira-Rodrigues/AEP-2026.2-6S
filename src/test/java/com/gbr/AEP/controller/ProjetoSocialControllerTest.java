@@ -9,6 +9,12 @@ import com.gbr.AEP.entity.ProjetoSocial;
 import com.gbr.AEP.entity.StatusProjeto;
 import com.gbr.AEP.service.ProjetoSocialService;
 import org.junit.jupiter.api.Test;
+import com.gbr.AEP.config.SecurityConfig;
+import com.gbr.AEP.security.ApiSecurityHandler;
+import org.springframework.context.annotation.Import;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.test.context.support.WithMockUser;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -34,6 +40,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+@Import({SecurityConfig.class, ApiSecurityHandler.class})
+@WithMockUser(username = "usuario-1")
 @WebMvcTest(controllers = ProjetoSocialController.class)
 class ProjetoSocialControllerTest {
 
@@ -49,6 +57,9 @@ class ProjetoSocialControllerTest {
               "status": "PLANEJADO"
             }
             """;
+
+    @MockitoBean
+    private UserDetailsService usuarios;
 
     @Autowired
     private MockMvc mockMvc;
@@ -70,7 +81,7 @@ class ProjetoSocialControllerTest {
     void criaProjetoComOrganizacao() throws Exception {
         given(service.criar(any(ProjetoSocialRequest.class))).willReturn(projetoComHistorico());
 
-        mockMvc.perform(post("/api/projetos").contentType(MediaType.APPLICATION_JSON).content(DADOS))
+        mockMvc.perform(post("/api/projetos").with(csrf()).contentType(MediaType.APPLICATION_JSON).content(DADOS))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.id").value(ID))
                 .andExpect(jsonPath("$.organizacao.id").value(ORGANIZACAO_ID));
@@ -79,7 +90,7 @@ class ProjetoSocialControllerTest {
     @Test
     void validaOrganizacaoObrigatoriaEFormatoDoId() throws Exception {
         for (String invalido : List.of("", "identificador-invalido")) {
-            mockMvc.perform(post("/api/projetos").contentType(MediaType.APPLICATION_JSON)
+            mockMvc.perform(post("/api/projetos").with(csrf()).contentType(MediaType.APPLICATION_JSON)
                             .content(DADOS.replace(ORGANIZACAO_ID, invalido)))
                     .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.erros.organizacaoId[0]").isString());
@@ -92,7 +103,7 @@ class ProjetoSocialControllerTest {
         given(service.criar(any(ProjetoSocialRequest.class))).willThrow(
                 new ResponseStatusException(HttpStatus.NOT_FOUND, "Organização não encontrada"));
 
-        mockMvc.perform(post("/api/projetos").contentType(MediaType.APPLICATION_JSON).content(DADOS))
+        mockMvc.perform(post("/api/projetos").with(csrf()).contentType(MediaType.APPLICATION_JSON).content(DADOS))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.detail").value("Organização não encontrada"));
     }
@@ -126,7 +137,7 @@ class ProjetoSocialControllerTest {
 
     @Test
     void rejeitaJsonComDataMalformada() throws Exception {
-        mockMvc.perform(post("/api/projetos").contentType(MediaType.APPLICATION_JSON)
+        mockMvc.perform(post("/api/projetos").with(csrf()).contentType(MediaType.APPLICATION_JSON)
                         .content(DADOS.replace("2026-09-10", "10/09/2026")))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.detail").isString());
@@ -136,7 +147,7 @@ class ProjetoSocialControllerTest {
     void editaProjeto() throws Exception {
         given(service.atualizar(eq(ID), any(ProjetoSocialRequest.class))).willReturn(projetoComHistorico());
 
-        mockMvc.perform(put("/api/projetos/{id}", ID).contentType(MediaType.APPLICATION_JSON).content(DADOS))
+        mockMvc.perform(put("/api/projetos/{id}", ID).with(csrf()).contentType(MediaType.APPLICATION_JSON).content(DADOS))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.atualizacoes[0].descricao").value("Início"));
     }
@@ -146,7 +157,7 @@ class ProjetoSocialControllerTest {
         var entrada = new AtualizacaoProjetoRequest("Início");
         given(service.publicarAtualizacao(ID, entrada)).willReturn(projetoComHistorico());
 
-        mockMvc.perform(post("/api/projetos/{id}/atualizacoes", ID).contentType(MediaType.APPLICATION_JSON)
+        mockMvc.perform(post("/api/projetos/{id}/atualizacoes", ID).with(csrf()).contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"descricao":"Início","data":"1990-01-01T00:00:00Z"}
                                 """))
@@ -158,7 +169,7 @@ class ProjetoSocialControllerTest {
     @ParameterizedTest
     @ValueSource(strings = {"{}", "{\"descricao\":\"  \"}"})
     void rejeitaDescricaoAusenteOuEmBranco(String dados) throws Exception {
-        mockMvc.perform(post("/api/projetos/{id}/atualizacoes", ID).contentType(MediaType.APPLICATION_JSON)
+        mockMvc.perform(post("/api/projetos/{id}/atualizacoes", ID).with(csrf()).contentType(MediaType.APPLICATION_JSON)
                         .content(dados))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.erros.descricao[0]").isString());
@@ -167,7 +178,7 @@ class ProjetoSocialControllerTest {
 
     @Test
     void excluiProjeto() throws Exception {
-        mockMvc.perform(delete("/api/projetos/{id}", ID)).andExpect(status().isNoContent());
+        mockMvc.perform(delete("/api/projetos/{id}", ID).with(csrf())).andExpect(status().isNoContent());
 
         then(service).should().excluir(ID);
     }

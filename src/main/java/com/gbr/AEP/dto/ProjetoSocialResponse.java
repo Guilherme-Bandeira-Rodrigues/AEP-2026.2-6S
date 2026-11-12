@@ -5,7 +5,8 @@ import com.gbr.AEP.entity.ProjetoSocial;
 import com.gbr.AEP.entity.StatusProjeto;
 
 import java.time.LocalDate;
-import java.time.LocalDateTime;
+import java.time.Instant;
+
 import java.util.List;
 
 public record ProjetoSocialResponse(
@@ -18,8 +19,8 @@ public record ProjetoSocialResponse(
         LocalDate dataInicio,
         LocalDate dataFim,
         StatusProjeto status,
-        LocalDateTime criadoEm,
-        LocalDateTime atualizadoEm,
+        Instant criadoEm,
+        Instant atualizadoEm,
         List<AtualizacaoProjeto> atualizacoes
 ) {
     public static ProjetoSocialResponse de(ProjetoSocial projeto, OrganizacaoResponse organizacao) {

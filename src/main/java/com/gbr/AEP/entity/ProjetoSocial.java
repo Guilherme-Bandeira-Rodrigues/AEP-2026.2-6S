@@ -8,7 +8,8 @@ import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.time.LocalDate;
-import java.time.LocalDateTime;
+import java.time.Instant;
+
 import java.util.List;
 
 @Data
@@ -27,8 +28,8 @@ public class ProjetoSocial {
     private LocalDate dataInicio;
     private LocalDate dataFim;
     private StatusProjeto status;
-    private LocalDateTime criadoEm;
-    private LocalDateTime atualizadoEm;
+    private Instant criadoEm;
+    private Instant atualizadoEm;
 
     @Builder.Default
     private List<AtualizacaoProjeto> atualizacoes = List.of();

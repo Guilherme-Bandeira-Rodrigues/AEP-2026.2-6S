@@ -5,6 +5,9 @@ import org.bson.Document;
 import org.bson.types.ObjectId;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
+import org.springframework.security.test.context.support.WithMockUser;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -31,6 +34,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+@WithMockUser(username = "usuario-integracao")
 @SpringBootTest
 @AutoConfigureMockMvc
 @EnabledIfEnvironmentVariable(named = "AEP_MONGODB_TEST_URI", matches = ".+")
@@ -60,16 +64,16 @@ class MongoFluxoIntegrationTest {
     @Test
     void persisteVinculoEHistoricoSemPerderAtualizacoesConcorrentes() throws Exception {
         String organizacaoId = cadastrarOrganizacao();
-        String projetoId = JsonPath.read(mvc.perform(post("/api/projetos")
+        String projetoId = JsonPath.read(mvc.perform(post("/api/projetos").with(csrf()).with(user("usuario-integracao"))
                         .contentType(MediaType.APPLICATION_JSON).content(projeto(organizacaoId)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.atualizacoes").isEmpty())
                 .andReturn().getResponse().getContentAsString(), "$.id");
 
-        mvc.perform(delete("/api/organizacoes/{id}", organizacaoId)).andExpect(status().isConflict());
+        mvc.perform(delete("/api/organizacoes/{id}", organizacaoId).with(csrf()).with(user("usuario-integracao"))).andExpect(status().isConflict());
 
         Callable<Void> editar = () -> {
-            mvc.perform(put("/api/projetos/{id}", projetoId).contentType(MediaType.APPLICATION_JSON)
+            mvc.perform(put("/api/projetos/{id}", projetoId).with(csrf()).with(user("usuario-integracao")).contentType(MediaType.APPLICATION_JSON)
                             .content(projeto(organizacaoId).replace("PLANEJADO", "EM_ANDAMENTO")))
                     .andExpect(status().isOk());
             return null;
@@ -99,8 +103,8 @@ class MongoFluxoIntegrationTest {
         assertThat(salvo.getList("atualizacoes", Document.class))
                 .allSatisfy(entrada -> assertThat(entrada.getDate("data")).isAfter(Date.from(Instant.EPOCH)));
 
-        mvc.perform(delete("/api/projetos/{id}", projetoId)).andExpect(status().isNoContent());
-        mvc.perform(delete("/api/organizacoes/{id}", organizacaoId)).andExpect(status().isNoContent());
+        mvc.perform(delete("/api/projetos/{id}", projetoId).with(csrf()).with(user("usuario-integracao"))).andExpect(status().isNoContent());
+        mvc.perform(delete("/api/organizacoes/{id}", organizacaoId).with(csrf()).with(user("usuario-integracao"))).andExpect(status().isNoContent());
     }
 
     @Test
@@ -116,7 +120,12 @@ class MongoFluxoIntegrationTest {
                 .andExpect(jsonPath("$.atualizacoes").isEmpty());
 
         String organizacaoId = cadastrarOrganizacao();
-        mvc.perform(put("/api/projetos/{id}", projetoId.toHexString()).contentType(MediaType.APPLICATION_JSON)
+        mvc.perform(put("/api/projetos/{id}", projetoId.toHexString()).with(csrf()).with(user("usuario-integracao"))
+                        .contentType(MediaType.APPLICATION_JSON).content(projeto(organizacaoId)))
+                .andExpect(status().isForbidden());
+        mongo.getCollection("projetos_sociais").updateOne(eq("_id", projetoId),
+                new Document("$set", new Document("organizacaoId", organizacaoId)));
+        mvc.perform(put("/api/projetos/{id}", projetoId.toHexString()).with(csrf()).with(user("usuario-integracao")).contentType(MediaType.APPLICATION_JSON)
                         .content(projeto(organizacaoId)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.organizacaoId").value(organizacaoId));
@@ -129,7 +138,7 @@ class MongoFluxoIntegrationTest {
 
     private Callable<Void> publicar(String id, String descricao) {
         return () -> {
-            mvc.perform(post("/api/projetos/{id}/atualizacoes", id).contentType(MediaType.APPLICATION_JSON)
+            mvc.perform(post("/api/projetos/{id}/atualizacoes", id).with(csrf()).with(user("usuario-integracao")).contentType(MediaType.APPLICATION_JSON)
                             .content("""
                                     {"descricao":"%s"}
                                     """.formatted(descricao)))
@@ -139,7 +148,7 @@ class MongoFluxoIntegrationTest {
     }
 
     private String cadastrarOrganizacao() throws Exception {
-        return JsonPath.read(mvc.perform(post("/api/organizacoes").contentType(MediaType.APPLICATION_JSON)
+        return JsonPath.read(mvc.perform(post("/api/organizacoes").with(csrf()).with(user("usuario-integracao")).contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"nome":"Instituto","descricao":"Organização comunitária.","emailContato":"contato@instituto.org"}
                                 """))

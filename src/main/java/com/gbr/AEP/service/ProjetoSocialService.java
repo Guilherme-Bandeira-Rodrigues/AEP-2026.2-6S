@@ -20,8 +20,7 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Instant;
-import java.time.LocalDateTime;
-import java.time.ZoneId;
+
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
@@ -39,7 +38,7 @@ public class ProjetoSocialService {
     public ProjetoSocialResponse criar(ProjetoSocialRequest dados) {
         validarPeriodo(dados);
         return organizacoes.comOrganizacao(dados.organizacaoId(), organizacao -> {
-            LocalDateTime agora = LocalDateTime.now();
+            Instant agora = Instant.now().truncatedTo(ChronoUnit.MILLIS);
             ProjetoSocial projeto = ProjetoSocial.builder()
                     .nome(dados.nome())
                     .descricao(dados.descricao())
@@ -63,6 +62,18 @@ public class ProjetoSocialService {
         if (status != null) {
             consulta.addCriteria(Criteria.where("status").is(status));
         }
+        return consultar(consulta);
+    }
+
+    public List<ProjetoSocialResponse> listarMeus() {
+        List<String> ids = organizacoes.listarMinhas().stream().map(OrganizacaoResponse::id).toList();
+        if (ids.isEmpty()) {
+            return List.of();
+        }
+        return consultar(Query.query(Criteria.where("organizacaoId").in(ids)));
+    }
+
+    private List<ProjetoSocialResponse> consultar(Query consulta) {
         List<ProjetoSocial> projetos = mongoTemplate.find(consulta, ProjetoSocial.class);
         List<String> ids = projetos.stream().map(ProjetoSocial::getOrganizacaoId)
                 .filter(Objects::nonNull).distinct().toList();
@@ -76,10 +87,9 @@ public class ProjetoSocialService {
     }
 
     public ProjetoSocialResponse atualizar(String id, ProjetoSocialRequest dados) {
-        if (!repository.existsById(id)) {
-            throw projetoNaoEncontrado();
-        }
+        ProjetoSocial existente = obterProjeto(id);
         validarPeriodo(dados);
+        organizacoes.validarProprietario(existente.getOrganizacaoId());
         return organizacoes.comOrganizacao(dados.organizacaoId(), organizacao -> {
             Update alteracoes = new Update()
                     .set("nome", dados.nome())
@@ -89,22 +99,24 @@ public class ProjetoSocialService {
                     .set("dataInicio", dados.dataInicio())
                     .set("dataFim", dados.dataFim())
                     .set("status", dados.status())
-                    .max("atualizadoEm", LocalDateTime.now())
+                    .max("atualizadoEm", Instant.now().truncatedTo(ChronoUnit.MILLIS))
                     .unset("organizacaoResponsavel");
             return ProjetoSocialResponse.de(modificar(id, alteracoes), organizacao);
         });
     }
 
     public ProjetoSocialResponse publicarAtualizacao(String id, AtualizacaoProjetoRequest dados) {
+        organizacoes.validarProprietario(obterProjeto(id).getOrganizacaoId());
         Instant agora = Instant.now().truncatedTo(ChronoUnit.MILLIS);
         AtualizacaoProjeto atualizacao = new AtualizacaoProjeto(agora, dados.descricao().strip());
         Update alteracoes = new Update()
                 .push("atualizacoes", atualizacao)
-                .max("atualizadoEm", LocalDateTime.ofInstant(agora, ZoneId.systemDefault()));
+                .max("atualizadoEm", agora);
         return comOrganizacao(modificar(id, alteracoes));
     }
 
     public void excluir(String id) {
+        organizacoes.validarProprietario(obterProjeto(id).getOrganizacaoId());
         ProjetoSocial removido = mongoTemplate.findAndRemove(porId(id), ProjetoSocial.class);
         if (removido == null) {
             throw projetoNaoEncontrado();

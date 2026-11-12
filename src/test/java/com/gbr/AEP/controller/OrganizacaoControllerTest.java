@@ -4,6 +4,12 @@ import com.gbr.AEP.dto.OrganizacaoRequest;
 import com.gbr.AEP.dto.OrganizacaoResponse;
 import com.gbr.AEP.service.OrganizacaoService;
 import org.junit.jupiter.api.Test;
+import com.gbr.AEP.config.SecurityConfig;
+import com.gbr.AEP.security.ApiSecurityHandler;
+import org.springframework.context.annotation.Import;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.test.context.support.WithMockUser;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.http.HttpStatus;
@@ -24,6 +30,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+@Import({SecurityConfig.class, ApiSecurityHandler.class})
+@WithMockUser(username = "usuario-1")
 @WebMvcTest(controllers = OrganizacaoController.class)
 class OrganizacaoControllerTest {
 
@@ -35,6 +43,9 @@ class OrganizacaoControllerTest {
     private static final String JSON = """
             {"nome":"Instituto Esperança","descricao":"Organização comunitária.","emailContato":"contato@instituto.org"}
             """;
+
+    @MockitoBean
+    private UserDetailsService usuarios;
 
     @Autowired
     private MockMvc mockMvc;
@@ -48,7 +59,7 @@ class OrganizacaoControllerTest {
         given(service.buscarPorId(ID)).willReturn(RESPOSTA);
         given(service.listarTodos()).willReturn(List.of(RESPOSTA));
 
-        mockMvc.perform(post("/api/organizacoes").contentType(MediaType.APPLICATION_JSON).content(JSON))
+        mockMvc.perform(post("/api/organizacoes").with(csrf()).contentType(MediaType.APPLICATION_JSON).content(JSON))
                 .andExpect(status().isCreated()).andExpect(jsonPath("$.id").value(ID));
         mockMvc.perform(get("/api/organizacoes/{id}", ID))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.emailContato").value(DADOS.emailContato()));
@@ -60,15 +71,15 @@ class OrganizacaoControllerTest {
     void editaEExcluiOrganizacao() throws Exception {
         given(service.atualizar(ID, DADOS)).willReturn(RESPOSTA);
 
-        mockMvc.perform(put("/api/organizacoes/{id}", ID).contentType(MediaType.APPLICATION_JSON).content(JSON))
+        mockMvc.perform(put("/api/organizacoes/{id}", ID).with(csrf()).contentType(MediaType.APPLICATION_JSON).content(JSON))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.nome").value(DADOS.nome()));
-        mockMvc.perform(delete("/api/organizacoes/{id}", ID)).andExpect(status().isNoContent());
+        mockMvc.perform(delete("/api/organizacoes/{id}", ID).with(csrf())).andExpect(status().isNoContent());
         then(service).should().excluir(ID);
     }
 
     @Test
     void rejeitaNomeDescricaoEEmailInvalidos() throws Exception {
-        mockMvc.perform(post("/api/organizacoes").contentType(MediaType.APPLICATION_JSON)
+        mockMvc.perform(post("/api/organizacoes").with(csrf()).contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"nome":" ","emailContato":"invalido"}
                                 """))
@@ -84,7 +95,7 @@ class OrganizacaoControllerTest {
         willThrow(new ResponseStatusException(HttpStatus.CONFLICT, "A organização possui projetos vinculados"))
                 .given(service).excluir(ID);
 
-        mockMvc.perform(delete("/api/organizacoes/{id}", ID))
+        mockMvc.perform(delete("/api/organizacoes/{id}", ID).with(csrf()))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.detail").value("A organização possui projetos vinculados"));
     }

@@ -23,7 +23,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
+
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -36,6 +36,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
+import static org.mockito.BDDMockito.willThrow;
 
 @ExtendWith(MockitoExtension.class)
 class ProjetoSocialServiceTest {
@@ -64,7 +65,7 @@ class ProjetoSocialServiceTest {
 
     private static ProjetoSocial projeto() {
         return ProjetoSocial.builder().id(PROJETO_ID).organizacaoId(ORGANIZACAO_ID)
-                .nome("Educação para Todos").criadoEm(LocalDateTime.of(2026, 9, 1, 10, 0)).build();
+                .nome("Educação para Todos").criadoEm(Instant.parse("2026-09-01T13:00:00Z")).build();
     }
 
     private void permitirVinculo() {
@@ -99,7 +100,7 @@ class ProjetoSocialServiceTest {
 
     @Test
     void rejeitaPeriodoInvertidoNaCriacaoEEdicao() {
-        given(repository.existsById(PROJETO_ID)).willReturn(true);
+        given(repository.findById(PROJETO_ID)).willReturn(Optional.of(projeto()));
         var invertido = dados(LocalDate.of(2026, 9, 10), LocalDate.of(2026, 9, 9));
 
         assertThatExceptionOfType(ResponseStatusException.class)
@@ -165,7 +166,7 @@ class ProjetoSocialServiceTest {
     void editaCamposSemSobrescreverHistoricoOuCriacao() {
         ProjetoSocial existente = projeto();
         existente.setAtualizacoes(List.of(new AtualizacaoProjeto(Instant.EPOCH, "Início")));
-        given(repository.existsById(PROJETO_ID)).willReturn(true);
+        given(repository.findById(PROJETO_ID)).willReturn(Optional.of(projeto()));
         permitirVinculo();
         given(mongoTemplate.findAndModify(any(Query.class), any(Update.class),
                 any(FindAndModifyOptions.class), eq(ProjetoSocial.class))).willReturn(existente);
@@ -185,7 +186,7 @@ class ProjetoSocialServiceTest {
     @Test
     void publicaAtualizacaoComDataDoServidorEGravacaoAtomica() {
         ProjetoSocial existente = projeto();
-        existente.setOrganizacaoId(null);
+        given(repository.findById(PROJETO_ID)).willReturn(Optional.of(existente));
         given(mongoTemplate.findAndModify(any(Query.class), any(Update.class),
                 any(FindAndModifyOptions.class), eq(ProjetoSocial.class))).willReturn(existente);
 
@@ -203,6 +204,7 @@ class ProjetoSocialServiceTest {
 
     @Test
     void excluiProjetoExistente() {
+        given(repository.findById(PROJETO_ID)).willReturn(Optional.of(projeto()));
         given(mongoTemplate.findAndRemove(any(Query.class), eq(ProjetoSocial.class))).willReturn(projeto());
         service.excluir(PROJETO_ID);
         then(mongoTemplate).should().findAndRemove(any(Query.class), eq(ProjetoSocial.class));
@@ -222,5 +224,35 @@ class ProjetoSocialServiceTest {
             assertThatExceptionOfType(ResponseStatusException.class).isThrownBy(operacao::run)
                     .matches(ex -> ex.getStatusCode() == HttpStatus.NOT_FOUND);
         }
+    }
+
+    @Test
+    void listaSomenteProjetosDasOrganizacoesDaConta() {
+        assertThat(service.listarMeus()).isEmpty();
+        then(mongoTemplate).shouldHaveNoInteractions();
+        given(organizacoes.listarMinhas()).willReturn(List.of(ORGANIZACAO));
+        given(mongoTemplate.find(any(Query.class), eq(ProjetoSocial.class))).willReturn(List.of(projeto()));
+        given(organizacoes.buscarPorIds(List.of(ORGANIZACAO_ID))).willReturn(Map.of(ORGANIZACAO_ID, ORGANIZACAO));
+
+        assertThat(service.listarMeus()).extracting(resposta -> resposta.id()).containsExactly(PROJETO_ID);
+        ArgumentCaptor<Query> consulta = ArgumentCaptor.forClass(Query.class);
+        then(mongoTemplate).should().find(consulta.capture(), eq(ProjetoSocial.class));
+        assertThat(consulta.getValue().getQueryObject().get("organizacaoId", Document.class))
+                .containsEntry("$in", List.of(ORGANIZACAO_ID));
+    }
+
+    @Test
+    void impedeAlterarExcluirOuPublicarEmProjetoDeOutraConta() {
+        given(repository.findById(PROJETO_ID)).willReturn(Optional.of(projeto()));
+        willThrow(new ResponseStatusException(HttpStatus.FORBIDDEN)).given(organizacoes).validarProprietario(ORGANIZACAO_ID);
+        List<Runnable> operacoes = List.of(
+                () -> service.atualizar(PROJETO_ID, dados(LocalDate.now(), null)),
+                () -> service.publicarAtualizacao(PROJETO_ID, new AtualizacaoProjetoRequest("Tentativa")),
+                () -> service.excluir(PROJETO_ID));
+        for (Runnable operacao : operacoes) {
+            assertThatExceptionOfType(ResponseStatusException.class).isThrownBy(operacao::run)
+                    .matches(ex -> ex.getStatusCode() == HttpStatus.FORBIDDEN);
+        }
+        then(mongoTemplate).shouldHaveNoInteractions();
     }
 }

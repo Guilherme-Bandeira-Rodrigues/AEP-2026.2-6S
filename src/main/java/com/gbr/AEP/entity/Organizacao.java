@@ -17,4 +17,5 @@ public class Organizacao {
     private String nome;
     private String descricao;
     private String emailContato;
+    private String proprietarioId;
 }
