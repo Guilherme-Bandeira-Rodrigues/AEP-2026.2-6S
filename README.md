@@ -1,77 +1,68 @@
-# API de Projetos Sociais
+# Projetos Sociais
 
-API REST em Java 21 com Spring Boot, Spring Security, Spring Data MongoDB e Swagger. A API permite consulta pública de iniciativas comunitárias e gestão de organizações, projetos e históricos pelo responsável autenticado. A proposta se relaciona ao ODS 16 pelo acesso à informação e transparência.
+PoC de consulta pública e gestão de iniciativas sociais: frontend em Next.js/React/TypeScript/Tailwind, API Java 21 com Spring Boot/Spring Security e banco MongoDB. A proposta apoia o ODS 16 pelo acesso à informação e transparência.
 
-## Execução local
+## Subir o projeto completo
 
-```powershell
-docker compose up -d mongodb
-.\mvnw.cmd spring-boot:run
-```
+Instale e inicie o **Docker Desktop com containers Linux** e Docker Compose. Não é necessário instalar Java, Node.js ou MongoDB no computador.
 
-No Linux ou macOS, use `./mvnw spring-boot:run`. A aplicação lê `MONGODB_URI` e, por padrão, usa as credenciais locais do Compose no banco `aep`. A interface do Swagger fica em [localhost:8080/swagger-ui.html](http://localhost:8080/swagger-ui.html).
-
-## API
-
-Consultas são públicas; gravações exigem sessão, token CSRF e propriedade do registro. Comece por `GET /api/auth/csrf`, cadastre a conta e faça login. Veja os contratos e exemplos em [Autenticação e integração do frontend](docs/autenticacao-frontend.md).
-
-| Método | Rota | Resultado |
-| --- | --- | --- |
-| GET | `/api/auth/csrf` | Obtém token CSRF e sessão anônima |
-| POST | `/api/auth/cadastro` | Cria conta com nome, e-mail e senha; retorna 201 |
-| POST | `/api/auth/login` | Autentica, renova a sessão e retorna o usuário |
-| GET | `/api/auth/me` | Consulta o usuário autenticado |
-| POST | `/api/auth/logout` | Encerra a sessão; retorna 204 |
-| GET | `/api/me/organizacoes` | Lista somente organizações da conta |
-| GET | `/api/me/projetos` | Lista somente projetos da conta |
-
-| Método | Rota | Resultado |
-| --- | --- | --- |
-| POST | `/api/organizacoes` | Cria organização e retorna 201 |
-| GET | `/api/organizacoes` | Lista organizações |
-| GET | `/api/organizacoes/{id}` | Consulta organização |
-| PUT | `/api/organizacoes/{id}` | Atualiza organização |
-| DELETE | `/api/organizacoes/{id}` | Exclui organização com 204 ou retorna 409 se houver projetos vinculados |
-| POST | `/api/projetos` | Cria projeto com organização existente e retorna 201 |
-| GET | `/api/projetos` | Lista projetos com organização e histórico |
-| GET | `/api/projetos/{id}` | Consulta projeto com organização e histórico |
-| PUT | `/api/projetos/{id}` | Atualiza dados editáveis e preserva o histórico |
-| POST | `/api/projetos/{id}/atualizacoes` | Publica atualização e retorna 201 com o projeto e o histórico completo |
-| DELETE | `/api/projetos/{id}` | Exclui projeto com 204 |
-
-Cadastre uma organização com `nome`, `descricao` e `emailContato`. Use o `id` retornado no campo `organizacaoId` ao cadastrar ou editar um projeto. O projeto tem seu próprio `emailContato`, além de `nome`, `descricao`, `dataInicio`, `status` e `dataFim` opcional.
-
-Publique uma atualização com um corpo como `{"descricao":"A primeira turma iniciou as atividades."}`. A API registra a data e a hora em UTC e acrescenta a entrada ao final da lista. Para combinar filtros, use `GET /api/projetos?nome=educa&status=EM_ANDAMENTO`. A busca por nome usa um trecho literal sem distinção entre maiúsculas e minúsculas. Os status aceitos são `PLANEJADO`, `EM_ANDAMENTO`, `CONCLUIDO` e `CANCELADO`.
-
-A API responde com `400` para dados inválidos, `401` para autenticação ausente/inválida, `403` para CSRF inválido ou operação em recurso de outra conta, `404` para recursos inexistentes e `409` para e-mail duplicado ou organização em uso. As respostas de erro usam `application/problem+json`. Erros de validação de campos incluem o mapa `erros`.
-
-`FRONTEND_ORIGINS` configura as origens CORS (padrão: `http://localhost:3000`, valores separados por vírgula). O frontend deve enviar credenciais e o header CSRF em gravações. Em HTTPS, configure `SESSION_COOKIE_SECURE=true`. As sessões expiram após 30 minutos sem atividade.
-
-## Persistência e migração
-
-A coleção `organizacoes` usa um `ObjectId` em `_id`. Em `projetos_sociais`, `organizacaoId` armazena a representação textual desse identificador. O campo `atualizacoes` contém subdocumentos com `data` (BSON Date) e `descricao`. A publicação acrescenta uma entrada atomicamente, enquanto a edição altera apenas os campos do cadastro. Na implantação com uma instância da API, a validação e a gravação do vínculo são sincronizadas com a exclusão da organização.
-
-Consulte o [procedimento de migração](docs/migracao-organizacoes.md) se o banco já contiver projetos com `organizacaoResponsavel`.
-
-A coleção `usuarios` armazena o hash BCrypt da senha e possui índice único de e-mail normalizado. Organizações têm `proprietarioId` definido pela sessão, nunca pelo cliente. Projetos herdam a autorização da organização vinculada. Os dados antigos sem proprietário precisam de associação administrativa explícita antes de serem editados. Timestamps de criação, edição e publicação são retornados em UTC; os BSON Dates existentes são preservados.
-
-## Testes
-
-Execute `./mvnw verify` ou `.\mvnw.cmd verify`. O JaCoCo gera o relatório em `target/site/jacoco/index.html`.
-
-Use `clean verify` para medir uma compilação limpa. O build exige pelo menos **80% de linhas e 80% de branches**, acima do mínimo de 70% da entrega. A suíte padrão cobre validação, autenticação, sessão, CSRF, CORS e autorização. Sem `AEP_MONGODB_TEST_URI`, os testes de integração são explicitamente ignorados.
-
-Para incluir os testes de integração, configure `AEP_MONGODB_TEST_URI` com a URI de um MongoDB de desenvolvimento. Por exemplo, no PowerShell com o Compose local em execução:
+Na raiz do repositório:
 
 ```powershell
-$env:AEP_MONGODB_TEST_URI = 'mongodb://admin:admin@localhost:27017/?authSource=admin'
-.\mvnw.cmd verify
+docker compose up --build -d --wait --wait-timeout 180
 ```
 
-A suíte de integração cria e remove um banco temporário de nome aleatório e exige que o usuário do MongoDB tenha permissão para essas operações.
+O primeiro build baixa as imagens e dependências e pode levar alguns minutos. O Dockerfile da API executa `mvnw verify`, incluindo testes unitários e a verificação JaCoCo; os testes que exigem MongoDB externo permanecem condicionados à configuração descrita na documentação da API. O frontend é compilado em modo de produção, integrado à API real.
 
-A integração testa cadastro/login com MongoDB, índice único sob concorrência, isolamento entre duas contas, bloqueio de apropriação de projetos, CSRF real, rotação de sessão, logout e preservação de histórico.
+| Serviço | Endereço |
+| --- | --- |
+| Frontend | http://localhost:3000 |
+| API | http://localhost:8080/api/projetos |
+| Swagger | http://localhost:8080/swagger-ui.html |
+| MongoDB | `mongodb:27017`, somente na rede dos containers |
 
-## Evolução
+Use **localhost** no navegador, pois a origem CORS e a URL pública da API estão configuradas para esse endereço. Cadastre uma conta, faça login, crie uma organização e então um projeto. As atualizações publicadas aparecem na consulta pública.
 
-A primeira versão (`0025812`) oferecia CRUD de projetos com o nome da organização no próprio documento. A segunda acrescenta organizações relacionadas, histórico de atualizações, filtros, documentação de migração e gestão autenticada por proprietário. A implementação mantém controller → service → repository/MongoTemplate, com DTOs de entrada e saída separados das entidades persistidas.
+Os serviços aguardam os respectivos healthchecks: MongoDB → API → frontend. API e frontend usam builds em estágios, com execução sem usuário root. O Next utiliza o artefato standalone apenas no Docker, mantendo `npm run dev` e `npm start` disponíveis no desenvolvimento local.
+
+## Configuração e dados
+
+Os valores padrão permitem execução local imediata. Para personalizar portas ou credenciais, copie `.env.example` para `.env` **na raiz**, antes de iniciar:
+
+```powershell
+Copy-Item .env.example .env
+docker compose config --quiet
+docker compose up --build -d --wait --wait-timeout 180
+```
+
+`WEB_PORT` e `API_PORT` atualizam também CORS e a URL da API incorporada ao frontend. Alterar a porta da API exige reconstruir o frontend com `--build`, pois variáveis `NEXT_PUBLIC_*` são incorporadas durante a compilação. O `.env.local` de `web` não é copiado para a imagem.
+
+As credenciais padrão são exclusivas desta configuração local. Use caracteres alfanuméricos, `_` e `-` nas credenciais configuradas aqui, pois são interpoladas na URI. A inicialização das credenciais do MongoDB ocorre apenas na primeira criação do volume; editar `.env` não altera usuários de um banco já inicializado.
+
+O volume `mongodb_data` preserva contas, organizações e projetos entre reinícios. `docker compose down` remove os containers e mantém os dados. Evite `down -v` se quiser preservá-los: essa opção remove também o volume do banco.
+
+Esta configuração expõe frontend/API apenas em `127.0.0.1` e não publica a porta do banco. Ela é destinada à execução local e avaliação. Para hospedagem, configure domínio, HTTPS, origens CORS, cookie seguro e credenciais próprias.
+
+O arquivo `api/docker-compose.yml` continua disponível para o desenvolvimento que usa apenas MongoDB/mongo-express. Ele é independente do Compose completo da raiz e usa outro volume; dados anteriores não são migrados automaticamente.
+
+## Comandos úteis
+
+```powershell
+docker compose ps
+docker compose logs -f api web
+docker compose stop
+docker compose start
+docker compose down
+```
+
+Para reconstruir após mudanças no código, use novamente `docker compose up --build -d --wait`.
+
+## Documentação e testes
+
+- [API: execução, endpoints, modelagem e testes](api/README.md)
+- [Frontend: estrutura, funcionalidades e testes de cobertura](web/README.md)
+- [Contrato de autenticação e integração](api/docs/autenticacao-frontend.md)
+
+O build Docker da API inclui sua suíte padrão. Para gerar o relatório do frontend localmente, execute `npm ci` e `npm run test:coverage` dentro de `web`. Os relatórios são independentes; consulte cada README para os comandos reproduzíveis e testes de integração com MongoDB.
+
+Referências de implementação: [Next.js standalone](https://nextjs.org/docs/app/api-reference/config/next-config-js/output) e [ordem de inicialização no Compose](https://docs.docker.com/compose/how-tos/startup-order/).
