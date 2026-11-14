@@ -2,6 +2,17 @@
 
 PoC de consulta pública e gestão de iniciativas sociais: frontend em Next.js/React/TypeScript/Tailwind, API Java 21 com Spring Boot/Spring Security e banco MongoDB. A proposta apoia o ODS 16 pelo acesso à informação e transparência.
 
+## Metodologia de trabalho
+
+Utilizamos o **Kanban** para organizar e acompanhar as tarefas do projeto, com um quadro no **KanbanThing**. O fluxo de trabalho foi dividido nas colunas **Backlog**, **In Progress**, **Em validação** e **Finalizado**, representando as tarefas planejadas, em desenvolvimento, em conferência e concluídas.
+
+O quadro registra atividades de modelagem do MongoDB, implementação da API e do frontend, testes automatizados e validação dos fluxos da PoC.
+
+[Consultar o quadro Kanban do projeto (somente leitura)](https://www.kanbanthing.com/board?view=6d5fc53d-f3f5-46c7-90f9-d80f32605fe6)
+
+
+![Quadro Kanban do projeto com as colunas Backlog, In Progress, Em validação e Finalizado](docs/images/kanban-segunda-entrega.png)
+
 ## Subir o projeto completo
 
 Instale e inicie o **Docker Desktop com containers Linux** e Docker Compose. Não é necessário instalar Java, Node.js ou MongoDB no computador.
